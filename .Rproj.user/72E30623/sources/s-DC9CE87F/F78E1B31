@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1568117511849.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "F78E1B31",
+    "lastKnownWriteTime" : 1568117526,
+    "last_content_update" : 1568117526484,
+    "path" : "~/R/timeseries/timeseries_analysis.R",
+    "project_path" : "timeseries_analysis.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
