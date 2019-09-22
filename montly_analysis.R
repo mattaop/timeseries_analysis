@@ -77,6 +77,21 @@ bootstrap <- function(parameters, residuals){
   }
   return(z)
 }
+
+simulate_arima_values_norm <- function(parameters, sigma2){
+  residuals = rnorm(n = 736+14, sd = sqrt(sigma2))
+  z <- vector(length=736)
+  for(i in 14:(736+13)){
+    # index <- sample(14:736, size=1) # Sample T random residuals from 
+    z[i-13] <- (residuals[i]
+                +parameters[1]*residuals[i-1]
+                +parameters[2]*residuals[i-12]
+                +parameters[1]*parameters[2]*residuals[i-13])
+    
+  }
+  return(z)
+}
+
 simulate_sequence <- function(data, model, observed_residuals){
   #simulated_data <- simulate(model, nsim=736)
   #simulated_model <- arima(simulated_data, order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
