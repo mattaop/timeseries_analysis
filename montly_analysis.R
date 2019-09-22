@@ -7,6 +7,7 @@ plot_path=paste0(getwd(),"/plot/")
 
 # Load data
 monthly.df = read.csv('data/monthly_in_situ_co2_mlo.csv', skip=58, sep=",", header=FALSE)
+print(monthly.df)
 monthly.ts = ts(data=monthly.df$V5[2:737], frequency = 12, start=c(1958,3), end = c(2019,6))
 
 # Interpolate missing data, simple linear interpolation
@@ -49,7 +50,7 @@ acf(model1, na.action = na.pass, lag.max = 36)
 pacf(model1, na.action = na.pass, lag.max = 36)
 
 # Fit ARIMA-model, print summary, plot residuals with qq and acf/pacf
-model = arima(model1, order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE)
+model = arima(model1, order = c(2,0,1), seasonal = c(0,0,1), include.mean = FALSE)
 summary(model)
 plot(model$residuals)
 qqPlot(c(model$residuals))
@@ -62,69 +63,67 @@ pacf(model$residuals)
 # auto.arima(diff1, d = 0, D = 0, ic="aicc")
 print(model$coef)
 print(model$var.coef)
-observed_residuals <- model$residuals
 
-
-bootstrap <- function(parameters, residuals){
-  sampled_residuals <- sample(residuals, size=736+13, replace=TRUE)
-  z <- vector(length=736)
-  for(i in 14:(736+13)){
-    # index <- sample(14:736, size=1) # Sample T random residuals from 
-    z[i-13] <- (sampled_residuals[i]
-               +parameters[1]*sampled_residuals[i-1]
-               +parameters[2]*sampled_residuals[i-12]
-               +parameters[1]*parameters[2]*sampled_residuals[i-13])
+bootstrap <- function(data, model){
+  bootstrap_residuals <- sample(model$residuals, size=736+13, replace=TRUE)
+  bootstrap_index <- sample(1:(length(data)-1), 1) # Get index for a random sample from the data, but not the last
+  x <- vector(length=736+2)
+  x[1] <- data[bootstrap_index] # Get a random x from the data
+  x[2] <- data[bootstrap_index+1]
+  for(i in 1:736){
+    j <- i + 2 # Shift timeseries to be indexed from -1 to 736
+    k <- i + 13 # Shift residual array to be indexed from -12 to 736
+    x[j] <- (model$coef['ar1']*x[j-1]
+             +model$coef['ar2']*x[j-2]
+             +bootstrap_residuals[k]
+             +model$coef['ma1']*bootstrap_residuals[k-1]
+             +model$coef['sma1']*bootstrap_residuals[k-12]
+             +model$coef['ma1']*model$coef['sma1']*bootstrap_residuals[k-13]
+             )
   }
-  return(z)
+  generated_timeseries <- ts(data=tail(x, -2), frequency = 12, start=c(1958,3), end = c(2019,6))
+  return(generated_timeseries)
 }
-
-simulate_arima_values_norm <- function(parameters, sigma2){
-  residuals = rnorm(n = 736+14, sd = sqrt(sigma2))
-  z <- vector(length=736)
-  for(i in 14:(736+13)){
-    # index <- sample(14:736, size=1) # Sample T random residuals from 
-    z[i-13] <- (residuals[i]
-                +parameters[1]*residuals[i-1]
-                +parameters[2]*residuals[i-12]
-                +parameters[1]*parameters[2]*residuals[i-13])
-    
-  }
-  return(z)
-}
-
-simulate_sequence <- function(data, model, observed_residuals){
+simulate_sequence <- function(data, model){
   #simulated_data <- simulate(model, nsim=736)
-  #simulated_model <- arima(simulated_data, order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
-  simulated_data  <- bootstrap(model$coef, observed_residuals)
-  simulated_model <- arima(ts(data=simulated_data, frequency = 12), order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
+  simulated_data  <- bootstrap(data, model)
+  simulated_model <- arima(simulated_data, order = c(2,0,1), seasonal = c(0,0,1), include.mean = FALSE)
   beta <- simulated_model$coef
   return (beta)
 }
-beta <- simulate_sequence(diff1, model, observed_residuals)
-print(beta)
+beta <- simulate_sequence(model1, model)
 
-sample_parameters <- function(B, diff1, model, observed_residuals){
-  sampled_beta <- matrix(nrow=2, ncol=B) # Matrix to store sampled beta
+sample_parameters <- function(B, diff1, model){
+  sampled_beta <- matrix(nrow=4, ncol=B) # Matrix to store sampled beta
   for (i in 1:B){
     # Return betas for random generated sequences
-    beta_hat <- simulate_sequence(diff1, model, observed_residuals) 
+    beta_hat <- simulate_sequence(diff1, model) 
     sampled_beta[,i] <- beta_hat # Store betas
   }
   observed_mean <- rowSums(sampled_beta)/B # Compute observed mean for sampled betas for LS
   observed_bias <- model$coef - observed_mean # Compute observed bias for sampled betas for LA
-  observed_variance <- c(var(sampled_beta[1,]), var(sampled_beta[2,])) # Compute 
+  observed_variance <- c(var(sampled_beta[1,]), var(sampled_beta[2,]),
+                         var(sampled_beta[3,])
+                         ,var(sampled_beta[4,])
+                         ) # Compute 
   # observed variance for sampled betas
   return(list(beta = sampled_beta, mean = observed_mean, bias = observed_bias, variance = observed_variance))
 }
-B = 1500
-bootstrap_samples = sample_parameters(B, diff1, model, observed_residuals)
+B = 1000
+bootstrap_samples = sample_parameters(B, model1, model)
 # print(bootstrap_samples$beta)
 print(bootstrap_samples$mean)
 print(bootstrap_samples$bias)
 print(bootstrap_samples$variance)
-hist(bootstrap_samples$beta[1,], freq = F, breaks=40, main="Histogram of bootstrap samples", 
-     xlab="Sampled beta_1 values", ylab="Denisty", sub="Figure 1: Histogram of bootstrap samples of ma1 parameter.")
+hist(bootstrap_samples$beta[1,], freq = F, breaks=40, main="Histogram of simulated samples", 
+     xlab="Ar1", ylab="Denisty")
 abline(v=c(model$coef[1], bootstrap_samples$mean[1], quantile(bootstrap_samples$beta[1,], c(0.025, 0.975))), col=c("red", "yellow", "blue", "blue"))
-hist(bootstrap_samples$beta[2,], freq = F, breaks=40, main="Histogram of bootstrap samples", 
-     xlab="Sampled beta_2 values", ylab="Denisty", sub = "Figure 2: Histogram of bootstrap samples of sma1 parameter.")
+hist(bootstrap_samples$beta[2,], freq = F, breaks=40, main="Histogram of simulated samples", 
+     xlab="Ar2", ylab="Denisty")
 abline(v=c(model$coef[2], bootstrap_samples$mean[2], quantile(bootstrap_samples$beta[2,], c(0.025, 0.975))), col=c("red", "yellow", "blue", "blue"))
+hist(bootstrap_samples$beta[3,], freq = F, breaks=40, main="Histogram of simulated samples", 
+     xlab="Ma1", ylab="Denisty")
+abline(v=c(model$coef[3], bootstrap_samples$mean[3], quantile(bootstrap_samples$beta[3,], c(0.025, 0.975))), col=c("red", "yellow", "blue", "blue"))
+hist(bootstrap_samples$beta[4,], freq = F, breaks=40, main="Histogram of simulated samples", 
+     xlab="Sma1", ylab="Denisty")
+abline(v=c(model$coef[4], bootstrap_samples$mean[4], quantile(bootstrap_samples$beta[4,], c(0.025, 0.975))), col=c("red", "yellow", "blue", "blue"))
