@@ -65,9 +65,10 @@ print(model$coef)
 print(model$var.coef)
 
 bootstrap <- function(data, model){
-  bootstrap_residuals <- sample(model$residuals, size=736+13, replace=TRUE)
-  bootstrap_index <- sample(1:(length(data)-1), 1) # Get index for a random sample from the data, but not the last
-  x <- vector(length=736+2)
+  n = length(data)
+  bootstrap_residuals <- sample(model$residuals, size=n+13, replace=TRUE)
+  bootstrap_index <- sample(1:(n-1), 1) # Get index for a random sample from the data, but not the last
+  x <- vector(length=n+2)
   x[1] <- data[bootstrap_index] # Get a random x from the data
   x[2] <- data[bootstrap_index+1]
   if (is.nan(x[1])){
@@ -82,9 +83,9 @@ bootstrap <- function(data, model){
     print(x[1])
     print(x[2])
   }
-  for(i in 1:736){
-    j <- i + 2 # Shift timeseries to be indexed from -1 to 736
-    k <- i + 13 # Shift residual array to be indexed from -12 to 736
+  for(i in 1:n){
+    j <- i + 2 # Shift timeseries to be indexed from -1 to n
+    k <- i + 13 # Shift residual array to be indexed from -12 to n
     x[j] <- (model$coef['ar1']*x[j-1]
              +model$coef['ar2']*x[j-2]
              +bootstrap_residuals[k]
