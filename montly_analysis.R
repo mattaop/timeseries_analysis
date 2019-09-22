@@ -65,7 +65,7 @@ print(model$var.coef)
 observed_residuals <- model$residuals
 
 
-simulate_arima_values <- function(parameters, residuals){
+bootstrap <- function(parameters, residuals){
   sampled_residuals <- sample(residuals, size=736+13, replace=TRUE)
   z <- vector(length=736)
   for(i in 14:(736+13)){
@@ -73,15 +73,15 @@ simulate_arima_values <- function(parameters, residuals){
     z[i-13] <- (sampled_residuals[i]
                +parameters[1]*sampled_residuals[i-1]
                +parameters[2]*sampled_residuals[i-12]
-               +parameters[1]*sampled_residuals[2]*residuals[i-13])
+               +parameters[1]*parameters[2]*sampled_residuals[i-13])
   }
   return(z)
 }
 simulate_sequence <- function(data, model, observed_residuals){
-  simulated_data <- simulate(model, nsim=736)
-  simulated_model <- arima(simulated_data, order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
-  # simulated_data  <- simulate_arima_values(model$coef, observed_residuals)
-  # simulated_model <- arima(ts(data=simulated_data, frequency = 12), order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
+  #simulated_data <- simulate(model, nsim=736)
+  #simulated_model <- arima(simulated_data, order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
+  simulated_data  <- bootstrap(model$coef, observed_residuals)
+  simulated_model <- arima(ts(data=simulated_data, frequency = 12), order = c(0,0,1), seasonal = c(0,0,1), include.mean = FALSE) # Fit betas for LS to the sequence
   beta <- simulated_model$coef
   return (beta)
 }
@@ -101,7 +101,7 @@ sample_parameters <- function(B, diff1, model, observed_residuals){
   # observed variance for sampled betas
   return(list(beta = sampled_beta, mean = observed_mean, bias = observed_bias, variance = observed_variance))
 }
-B = 1000
+B = 1500
 bootstrap_samples = sample_parameters(B, diff1, model, observed_residuals)
 # print(bootstrap_samples$beta)
 print(bootstrap_samples$mean)
