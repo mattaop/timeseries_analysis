@@ -7,7 +7,8 @@ plot_path=paste0(getwd(),"/plot/")
 
 # Load data
 monthly.df = read.csv('data/monthly_in_situ_co2_mlo.csv', skip=58, sep=",", header=FALSE)
-print(monthly.df)
+
+# Convert to time series object
 monthly.ts = ts(data=monthly.df$V5[2:737], frequency = 12, start=c(1958,3), end = c(2019,6))
 
 # Interpolate missing data, simple linear interpolation
@@ -30,7 +31,6 @@ dev.off()
 pdf(paste0(plot_path,"acf_decomposed.pdf"), width=8, height=5)
 acf(monthly.dc$random, na.action = na.pass, lag.max = 36)
 dev.off()
-
 
 
 # Transform and difference series, plot result and print mean, plot acf/pacf
@@ -56,36 +56,19 @@ plot(model$residuals)
 qqPlot(c(model$residuals))
 acf(model$residuals)
 pacf(model$residuals)
-# futurVal <- forecast.Arima(model, h=10, level=c(99.5))
-# plot.forecast(futurVal)
-# Fit auto-arima to find "best" model, with and wothout restrains
 
-# auto.arima(diff1, d = 0, D = 0, ic="aicc")
-print(model$coef)
-print(model$var.coef)
-
+# Function to bootstrap samples based on observed residuals
 bootstrap <- function(data, model){
   n = length(data)
-  bootstrap_residuals <- sample(model$residuals, size=n+13, replace=TRUE)
-  bootstrap_index <- sample(1:(n-1), 1) # Get index for a random sample from the data, but not the last
+  bootstrap_residuals <- sample(model$residuals, size=n+13, replace=TRUE) # Sample n random residuals
+  bootstrap_index <- sample(1:(n-1), 1) # Get index for a random sample from the data
   x <- vector(length=n+2)
   x[1] <- data[bootstrap_index] # Get a random x from the data
-  x[2] <- data[bootstrap_index+1]
-  if (is.nan(x[1])){
-    print(length(data))
-    print(bootstrap_index)
-    print(x[1])
-    print(x[2])
-  }
-  if(is.nan(x[2])){
-    print(length(data))
-    print(bootstrap_index)
-    print(x[1])
-    print(x[2])
-  }
+  x[2] <- data[bootstrap_index+1] # Get the next x
   for(i in 1:n){
     j <- i + 2 # Shift timeseries to be indexed from -1 to n
     k <- i + 13 # Shift residual array to be indexed from -12 to n
+    # Compute next step in time series
     x[j] <- (model$coef['ar1']*x[j-1]
              +model$coef['ar2']*x[j-2]
              +bootstrap_residuals[k]
@@ -94,26 +77,27 @@ bootstrap <- function(data, model){
              +model$coef['ma1']*model$coef['sma1']*bootstrap_residuals[k-13]
              )
   }
+  # COnvert to time series object
   generated_timeseries <- ts(data=tail(x, -2), frequency = 12)
   return(generated_timeseries)
 }
 sample_parameters <- function(B, diff1, model){
   sampled_beta <- matrix(nrow=4, ncol=B) # Matrix to store sampled beta
   for (i in 1:B){
-    #simulated_data <- simulate(diff1, nsim=736) # Simulate time series data
     simulated_data  <- bootstrap(diff1, model) # Bootstrap time series data
+    # Fit model on simulated data
     simulated_model <- arima(simulated_data, order = c(2,0,1), seasonal = c(0,0,1), include.mean = FALSE)
-    beta_hat <- simulated_model$coef 
-    sampled_beta[,i] <- beta_hat # Store betas
+    sampled_beta[,i] <- simulated_model$coef # Store parameters
   }
-  observed_mean <- rowSums(sampled_beta)/B # Compute observed mean for sampled betas for LS
-  observed_bias <- model$coef - observed_mean # Compute observed bias for sampled betas for LA
+  observed_mean <- rowSums(sampled_beta)/B # Compute observed mean for sampled parameters
+  observed_bias <- model$coef - observed_mean # Compute observed bias for sampled parameters
   observed_variance <- c(var(sampled_beta[1,]), var(sampled_beta[2,]),
                          var(sampled_beta[3,]),var(sampled_beta[4,])
-                         ) # Compute observed variance for sampled betas
+                         ) # Compute observed variance for sampled parameters
   return(list(beta = sampled_beta, mean = observed_mean, bias = observed_bias, variance = observed_variance))
 }
 B = 10000
+# Sample B parameters using bootstrap method
 simulated_samples = sample_parameters(B, model1, model)
 
 # Print statistics
